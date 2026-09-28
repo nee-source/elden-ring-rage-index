@@ -1,0 +1,101 @@
+# Elden Ring Boss Rage-Quit Index
+
+> DENG HS26 — End-to-End Batch Data Pipeline · Team XX · Status: **Milestone 1 (Architecture v0.1)**
+
+Which Elden Ring boss makes players give up? This project combines two public Steam sources:
+
+- **What players do:** the global achievement unlock rate for each boss
+- **What players say:** Steam reviews that mention a boss
+
+Together they give each boss a *Rage-Quit Index*.
+
+## Use case
+
+| | |
+|---|---|
+| **Stakeholder** | An Elden Ring guide writer or YouTuber who has to decide which boss guide to make next |
+| **Questions** | 1. At which boss do the most players stop progressing? <br> 2. Which bosses show up more often in *negative* reviews? <br> 3. How many hours into the game does that happen? |
+| **Data product** | Curated tables `boss_funnel_daily`, `boss_mentions_daily` and `boss_rage_ranking` (see [docs/use-case.md](docs/use-case.md)) |
+
+## Data sources
+
+| Source | What | Access | Load pattern |
+|---|---|---|---|
+| Steam reviews API | ~832k user reviews: text, thumbs up/down, playtime at review | public JSON, no key, cursor pagination | historical backfill, then daily incremental |
+| Steam global achievement % | unlock rate for 42 achievements, 30 of them boss kills | public JSON, no key | daily snapshot (the API only returns the current value) |
+
+Plus two small hand-made seed tables in `seeds/`, versioned in git:
+- `achievement_boss_map.csv`: achievement code → boss
+- `boss_aliases.csv`: boss → the names players use in reviews
+
+Details (schema, volume, quality risks): [docs/dataset.md](docs/dataset.md)
+
+## Architecture v0.1
+
+```mermaid
+flowchart LR
+    R[Steam reviews API] --> I[Python batch ingestion]
+    A[Steam achievement %] --> I
+    I --> L[(Raw JSON landing)]
+    L --> P[(PostgreSQL<br/>staging)]
+    SEED[seeds/*.csv] --> T
+    P --> T[Transform:<br/>match bosses,<br/>funnel, index]
+    T --> M[(Curated tables)]
+    M --> U[Guide writer:<br/>SQL / dashboard]
+    O{{Orchestrator: daily schedule,<br/>retries, backfills}} -.-> I & T
+```
+
+v0.1 runs locally (Docker, PostgreSQL). For the final milestone, the raw landing moves to **Google Cloud Storage** and the curated layer to **BigQuery**, both provisioned with Terraform.
+
+- Full description: [docs/architecture-v0.1.md](docs/architecture-v0.1.md)
+- Why these sources: [docs/adr/0001-data-source-selection.md](docs/adr/0001-data-source-selection.md)
+
+## Repository structure
+
+```
+.
+├── docs/                 # dataset, use case, architecture, plan, ADRs
+├── seeds/                # hand-maintained mapping tables
+├── ingestion/            # batch ingestion scripts            (Milestone 2)
+├── sql/                  # schemas and transformations        (Milestone 2)
+├── orchestration/        # orchestrator flows                 (Milestone 2)
+├── infra/terraform/      # GCS bucket + BigQuery dataset      (Milestone 3)
+├── data/                 # local data, never committed
+└── .env.example          # environment variables (no real secrets)
+```
+
+## Milestones
+
+| Milestone | Date | Status |
+|---|---|---|
+| 1. Pitch, Architecture v0.1 | 01.10.2026 | in progress |
+| 2. Midterm: local pipeline (Docker, PostgreSQL, orchestration) | repo 22.10.2026, defence 29.10.2026 | planned |
+| 3. Final: cloud pipeline (Terraform, GCS, BigQuery, modeling, DQ) | repo 10.12.2026, defence 17.12.2026 | planned |
+
+Plan and backlog: [docs/project-plan.md](docs/project-plan.md)
+
+## Setup
+
+The pipeline can't be run yet. Setup, run and verification instructions will come with Milestone 2.
+You'll need Docker / Docker Compose and Python 3.11+. No API key is needed. To configure, copy `.env.example` to `.env`, and never commit `.env`.
+
+## Known limitations (v0.1)
+
+- **No history from the source:** Steam only provides today's achievement percentages. History exists only from the day we start snapshotting, and it can't be backfilled.
+- **English only:** we only analyse English reviews.
+- **Name matching:** boss mentions are found by matching names and nicknames from our seed table. Expect some false positives and misses.
+- **Not true churn:** achievement % is a share of *all owners*, including people who never really played. Drop-offs compare bosses to each other; they don't measure how many players quit overall.
+
+## Team
+
+| | Main responsibility |
+|---|---|
+| Student A | review ingestion (pagination, incremental loads), boss matching, orchestration |
+| Student B | achievement snapshots, PostgreSQL + Docker, Terraform + BigQuery |
+
+We build the transformations and the rage index together. We both review each other's work and can explain the whole pipeline.
+
+## Data & terms
+
+The pipeline reads public Steam endpoints only, at a low request rate. Raw data is not redistributed in this repository.
+Elden Ring is © FromSoftware / Bandai Namco. This is a non-commercial university project.

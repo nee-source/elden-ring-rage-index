@@ -1,0 +1,43 @@
+achievement_code,display_name,is_boss,boss_key,main_path_order,unlock_pct_2026_09_25
+ACH39,Roundtable Hold,false,,,75.0
+ACH25,"Margit, the Fell Omen",true,margit,1,71.0
+ACH04,Shardbearer Godrick,true,godrick,2,65.1
+ACH40,Great Rune,false,,,60.7
+ACH26,Red Wolf of Radagon,true,red_wolf_radagon,,59.3
+ACH18,"Rennala, Queen of the Full Moon",true,rennala,,58.0
+ACH34,Leonine Misbegotten,true,leonine_misbegotten,,57.7
+ACH35,Royal Knight Loretta,true,loretta,,55.5
+ACH05,Shardbearer Radahn,true,radahn,,53.2
+ACH31,Mimic Tear,true,mimic_tear,,50.9
+ACH29,"Godfrey, First Elden Lord",true,godfrey_shade,,50.0
+ACH06,Shardbearer Morgott,true,morgott,3,49.6
+ACH28,Magma Wyrm Makar,true,makar,,47.9
+ACH13,God-Slaying Armament,false,,,45.6
+ACH21,Fire Giant,true,fire_giant,4,45.0
+ACH41,Erdtree Aflame,false,,,44.2
+ACH38,Commander Niall,true,niall,,44.0
+ACH07,Shardbearer Rykard,true,rykard,,43.6
+ACH33,"Astel, Naturalborn of the Void",true,astel,,43.4
+ACH20,Godskin Duo,true,godskin_duo,5,43.2
+ACH27,Godskin Noble,true,godskin_noble,,43.0
+ACH37,Ancestor Spirit,true,ancestor_spirit,,41.8
+ACH10,Maliketh the Black Blade,true,maliketh,6,41.6
+ACH09,Shardbearer Mohg,true,mohg_lord_of_blood,,40.7
+ACH11,"Hoarah Loux, Warrior",true,hoarah_loux,7,40.5
+ACH24,Valiant Gargoyles,true,valiant_gargoyles,,39.9
+ACH32,"Loretta, Knight of the Haligtree",true,loretta_haligtree,,39.8
+ACH36,Elemer of the Briar,true,elemer,,39.7
+ACH22,Dragonkin Soldier of Nokstella,true,dragonkin_nokstella,,39.2
+ACH23,Regal Ancestor Spirit,true,regal_ancestor_spirit,,38.1
+ACH08,Shardbearer Malenia,true,malenia,,36.4
+ACH30,"Mohg, the Omen",true,mohg_omen,,34.8
+ACH12,Dragonlord Placidusax,true,placidusax,,30.1
+ACH19,Lichdragon Fortissax,true,fortissax,,29.1
+ACH02,Age of the Stars,false,,,28.2
+ACH01,Elden Lord,false,,,23.9
+ACH14,Legendary Armaments,false,,,18.3
+ACH17,Legendary Ashen Remains,false,,,17.7
+ACH15,Legendary Talismans,false,,,17.7
+ACH16,Legendary Sorceries and Incantations,false,,,17.2
+ACH03,Lord of Frenzied Flame,false,,,16.4
+ACH00,Elden Ring,false,,,10.4
