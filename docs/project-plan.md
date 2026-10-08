@@ -20,7 +20,8 @@ Deadlines (Europe/Zurich):
 
 - [x] Daily achievement snapshot job, **first**, because its history can't be backfilled (B). It runs on GitHub Actions and writes to the `snapshots` branch
 - [x] Load the snapshot files from the `snapshots` branch into PostgreSQL (B)
-- [ ] Review ingestion: cursor pagination, retries, high-water mark (A)
+- [x] Review ingestion: cursor pagination, retries, high-water mark, run log (A)
+- [ ] Full review backfill (~1 h) (A)
 - [x] Docker Compose with PostgreSQL + pgAdmin on a shared network (B)
 - [ ] Add the ingestion service to Docker Compose once the loaders exist (B)
 - [x] PostgreSQL raw/staging/mart schemas (B)

@@ -7,10 +7,12 @@ Numbers were checked against the live endpoints on **2026-09-25**. Elden Ring's 
 | | |
 |---|---|
 | **Provenance** | User reviews on the Steam store, published by Valve |
-| **Access** | `GET https://store.steampowered.com/appreviews/1245620?json=1&filter=recent&language=english&num_per_page=100&cursor=<cursor>` |
+| **Access** | `GET https://store.steampowered.com/appreviews/1245620?json=1&filter=updated&language=english&num_per_page=100&purchase_type=all&review_type=all&cursor=<cursor>` (`filter=updated` sorts by last update, newest first; `purchase_type=all` also includes reviews from keys not bought on Steam) |
 | **Format** | JSON: `query_summary`, `reviews[]`, and a `cursor` for the next page |
 | **Update frequency** | Continuous. New reviews arrive every day, and existing ones can be edited or deleted |
-| **Volume** | 831,957 reviews in all languages (775,088 positive, 56,869 negative). At ~1–2 KB each that is ~1–1.5 GB of raw JSON *(estimate)*. The English subset is smaller |
+| **Volume** | 831,957 reviews in all languages (2026-09-25). **English: 573,286** (34,908 negative = 6.1 %) on 2026-10-08. About 1.1 KB per review as JSON, so a full English load is ~600 MB raw |
+| **Change rate** | About 100 English reviews are created or edited per day, so the daily incremental run is 1–2 pages. In our sample, 25–33 % of reviews had been edited after creation |
+| **Speed** | About 0.45 s per page of 100 reviews. A full backfill takes ~5,700 pages, about 1 hour with a 0.5 s pause between pages |
 
 **Fields we use**
 
@@ -45,6 +47,8 @@ All other fields stay in the raw JSON and are not used. That includes `author.st
 - **Mutable reviews:** reviews can be edited or deleted, so staging upserts on `recommendationid` rather than appending.
 - **Sarcasm:** a thumbs-up review can still complain. `voted_up` does not always match the tone of the text.
 - **Noise:** spam, memes, and empty or one-word reviews.
+- **Only roughly sorted:** the first page was not strictly in `timestamp_updated` order, so the loader stops only once a whole page is older than the high-water mark.
+- **Deletions are invisible** to incremental loads. A deleted review stays in our tables until a full reload.
 - **Rate limits:** they are undocumented, so we back off and retry. The one-time full backfill needs many requests.
 
 ## 2. Steam global achievement percentages (fact, daily snapshot)

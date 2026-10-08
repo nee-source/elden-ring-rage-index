@@ -136,6 +136,31 @@ docker compose exec postgres psql -U rage -d rage_index -c "SELECT snapshot_date
 
 You should see one row per day, each with 42 achievements.
 
+**5. Load the reviews**
+
+```bash
+python -m ingestion.load_reviews --max-pages 3          # quick test (~2 s); doesn't move the high-water mark
+python -m ingestion.load_reviews --since 2026-10-01     # backfill everything updated since a date
+python -m ingestion.load_reviews                        # incremental (the first successful run is a full backfill)
+```
+
+How the loader works:
+- It pages through the reviews, newest-updated first, and stops once a whole page is older than the high-water mark.
+- It saves every page to `data/raw/reviews/<date>/run_<id>/` and upserts it into `raw.reviews`. Then `sql/staging/reviews.sql` updates `staging.reviews`.
+- Every run is logged in `raw.ingestion_runs`. Only a successful run moves the high-water mark, so a crashed run is simply fetched again on the next run.
+- A **full backfill** of about 573k English reviews takes roughly 5,700 pages, about 1 hour, and ~600 MB of raw files. A daily incremental run takes 1–2 pages.
+
+If your database was created before `sql/init/02_ingestion_runs.sql` existed, apply it once:
+`docker compose exec -T postgres psql -U rage -d rage_index < sql/init/02_ingestion_runs.sql`
+
+**Verify:**
+
+```bash
+docker compose exec postgres psql -U rage -d rage_index -c "SELECT run_id, status, rows_loaded, note FROM raw.ingestion_runs ORDER BY run_id DESC LIMIT 5" -c "SELECT count(*), count(*) FILTER (WHERE NOT voted_up) AS negative FROM staging.reviews"
+```
+
+The latest run should show `success`, and `raw.reviews` and `staging.reviews` should hold the same number of rows. Running the loader again right away should load 0 reviews.
+
 ### Daily achievement snapshots (already running)
 
 Steam only provides the *current* achievement percentages, so a missed day can never be recovered. That's why this one job doesn't depend on anyone's laptop being on. It runs every day on GitHub Actions ([`.github/workflows/snapshot-achievements.yml`](.github/workflows/snapshot-achievements.yml)) and commits the result to the **`snapshots`** branch:
