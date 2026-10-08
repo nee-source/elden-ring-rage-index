@@ -3,19 +3,23 @@
 How it works:
 - Steam returns reviews newest-updated first (filter=updated), 100 per page,
   with a cursor for the next page.
-- The high-water mark is the highest timestamp_updated of the last successful
-  run. We page until a whole page is older than the mark (the order is only
-  roughly sorted, so one old review is not enough to stop).
+- The high-water mark is the highest timestamp_updated we had after the last
+  successful run. We page until a whole page is older than the mark (the order
+  is only roughly sorted, so one old review is not enough to stop).
 - Every page is saved as a raw file and upserted into raw.reviews, then
   sql/staging/reviews.sql updates staging.reviews.
-- Each run is logged in raw.ingestion_runs. Only a successful full run moves
-  the mark, so after a crash the next run fetches the same range again and the
-  upserts remove the duplicates.
+- Each run is logged in raw.ingestion_runs, including the cursor of the last
+  finished page. Only a successful run moves the mark. A failed run can be
+  continued with --resume; without it, the next run simply fetches the same
+  range again and the upserts remove the duplicates.
+- Steam rate-limits (HTTP 429) after roughly 150 quick requests and unblocks
+  after a few minutes, so on a 429 we wait a minute and try again.
 
 Usage:
     python -m ingestion.load_reviews                      # incremental (first run = full backfill)
     python -m ingestion.load_reviews --since 2026-10-01   # backfill everything updated since a date
     python -m ingestion.load_reviews --full               # reload all reviews
+    python -m ingestion.load_reviews --resume             # continue the last failed or killed run
     python -m ingestion.load_reviews --max-pages 3        # test run, does not move the mark
 """
 
@@ -24,6 +28,7 @@ import json
 import logging
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -35,7 +40,9 @@ from ingestion.db import connect
 
 URL = "https://store.steampowered.com/appreviews/{app_id}?{query}"
 STAGING_SQL = Path(__file__).parent.parent / "sql" / "staging" / "reviews.sql"
-MAX_TRIES = 4
+MAX_TRIES = 4             # other errors: retry after 2, 4, 8 s
+RATE_LIMIT_WAIT = 60      # HTTP 429: wait this many seconds ...
+RATE_LIMIT_TRIES = 10     # ... up to this many times
 
 UPSERT_RAW = """
     INSERT INTO raw.reviews (recommendationid, timestamp_updated, payload)
@@ -50,7 +57,7 @@ log = logging.getLogger("load_reviews")
 
 
 def fetch_page(app_id, language, cursor):
-    """One page of up to 100 reviews, retrying with back-off (2, 4, 8 s) on errors."""
+    """One page of up to 100 reviews. Waits on rate limits, retries other errors."""
     query = urllib.parse.urlencode({
         "json": 1,
         "filter": "updated",
@@ -62,59 +69,87 @@ def fetch_page(app_id, language, cursor):
     })
     req = urllib.request.Request(URL.format(app_id=app_id, query=query),
                                  headers={"User-Agent": "deng-hs26-rage-index"})
-    for attempt in range(1, MAX_TRIES + 1):
+    errors = rate_limits = 0
+    while True:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.load(resp)
-        except Exception as err:
-            if attempt == MAX_TRIES:
-                raise
-            wait = 2 ** attempt
-            log.warning("attempt %d failed (%s), retrying in %d s", attempt, err, wait)
+        except urllib.error.HTTPError as err:
+            if err.code != 429:
+                errors += 1
+                if errors == MAX_TRIES:
+                    raise
+                wait = 2 ** errors
+            else:
+                rate_limits += 1
+                if rate_limits == RATE_LIMIT_TRIES:
+                    raise
+                wait = RATE_LIMIT_WAIT
+            log.warning("%s, waiting %d s", err, wait)
             time.sleep(wait)
-
-
-def last_high_water_mark(conn):
-    row = conn.execute("""
-        SELECT coalesce(max(high_water_mark), 0)
-        FROM raw.ingestion_runs
-        WHERE source = 'reviews' AND status = 'success'
-    """).fetchone()
-    return row[0]
+        except Exception as err:  # network errors, timeouts
+            errors += 1
+            if errors == MAX_TRIES:
+                raise
+            wait = 2 ** errors
+            log.warning("%s, waiting %d s", err, wait)
+            time.sleep(wait)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--since", help="load everything updated since this date (YYYY-MM-DD)")
     parser.add_argument("--full", action="store_true", help="ignore the high-water mark")
+    parser.add_argument("--resume", action="store_true", help="continue the last failed run")
     parser.add_argument("--max-pages", type=int, help="stop after N pages (test run)")
-    parser.add_argument("--sleep", type=float, default=0.5, help="pause between pages in seconds")
+    parser.add_argument("--sleep", type=float, default=1.0, help="pause between pages in seconds")
     parser.add_argument("--data-dir", default=os.getenv("RAW_DATA_DIR", "data/raw"))
     parser.add_argument("--app-id", default=os.getenv("STEAM_APP_ID", "1245620"))
     parser.add_argument("--language", default=os.getenv("REVIEW_LANGUAGE", "english"))
     args = parser.parse_args()
 
     with connect() as conn:
-        run_id, started_at = conn.execute(
-            "INSERT INTO raw.ingestion_runs (source) VALUES ('reviews') RETURNING run_id, started_at"
-        ).fetchone()
-        conn.commit()
+        # where to start: mark = only reviews updated after it, cursor = first page to fetch
+        last_success = conn.execute("""
+            SELECT high_water_mark, finished_at FROM raw.ingestion_runs
+            WHERE source = 'reviews' AND status = 'success'
+            ORDER BY run_id DESC LIMIT 1
+        """).fetchone()
+        previous_mark, last_success_at = last_success or (0, datetime(1970, 1, 1, tzinfo=timezone.utc))
 
-        previous_mark = last_high_water_mark(conn)
-        if args.full:
+        cursor, note = "*", ""
+        if args.resume:
+            # "running" = the process was killed or the laptop shut down mid-run
+            failed = conn.execute("""
+                SELECT run_id, mark_from, last_cursor FROM raw.ingestion_runs
+                WHERE source = 'reviews' AND status IN ('failed', 'running')
+                  AND last_cursor IS NOT NULL
+                ORDER BY run_id DESC LIMIT 1
+            """).fetchone()
+            if failed is None:
+                raise SystemExit("no failed run with a saved cursor to resume")
+            failed_id, mark, cursor = failed
+            note = f"resumes run {failed_id}, "
+        elif args.full:
             mark = 0
         elif args.since:
             mark = int(datetime.fromisoformat(args.since).replace(tzinfo=timezone.utc).timestamp())
         else:
             mark = previous_mark
-        log.info("run %d: loading reviews updated after %s", run_id,
+
+        run_id, started_at = conn.execute("""
+            INSERT INTO raw.ingestion_runs (source, mark_from) VALUES ('reviews', %s)
+            RETURNING run_id, started_at
+        """, (mark,)).fetchone()
+        conn.commit()
+        log.info("run %d: %sloading reviews updated after %s", run_id, note,
                  datetime.fromtimestamp(mark, timezone.utc).isoformat() if mark else "the beginning")
 
         page_dir = Path(args.data_dir) / "reviews" / started_at.date().isoformat() / f"run_{run_id}"
         page_dir.mkdir(parents=True, exist_ok=True)
 
+        page = loaded = 0
         try:
-            cursor, page, loaded, newest = "*", 0, 0, mark
             while True:
                 data = fetch_page(args.app_id, args.language, cursor)
                 reviews = data.get("reviews", [])
@@ -128,9 +163,11 @@ def main():
                     cur.executemany(UPSERT_RAW, [
                         (r["recommendationid"], r["timestamp_updated"], Jsonb(r)) for r in new
                     ])
-                conn.commit()  # keep progress of long backfills
+                    # remember where the next page starts, so a failed run can be resumed
+                    cur.execute("UPDATE raw.ingestion_runs SET last_cursor = %s WHERE run_id = %s",
+                                (data["cursor"], run_id))
+                conn.commit()
                 loaded += len(new)
-                newest = max([newest] + [r["timestamp_updated"] for r in new])
 
                 if page % 50 == 0:
                     log.info("page %d, %d reviews loaded so far", page, loaded)
@@ -141,21 +178,25 @@ def main():
                 cursor = data["cursor"]
                 time.sleep(args.sleep)
 
+            # everything loaded since the last successful run, so rows of failed runs are included
             staged = conn.execute(STAGING_SQL.read_text(encoding="utf-8"),
-                                  {"since": started_at}).rowcount
+                                  {"since": last_success_at}).rowcount
 
-            # a test run with --max-pages may stop early, so it must not move the mark
+            # a successful run has everything from its mark up to now, so the newest
+            # timestamp in the table is a safe new mark. A test run may stop early.
             status = "partial" if args.max_pages else "success"
             conn.execute("""
                 UPDATE raw.ingestion_runs
-                SET finished_at = now(), status = %s, high_water_mark = %s, rows_loaded = %s, note = %s
+                SET finished_at = now(), status = %s, rows_loaded = %s, note = %s,
+                    high_water_mark = (SELECT max(timestamp_updated) FROM raw.reviews)
                 WHERE run_id = %s
-            """, (status, max(previous_mark, newest), loaded, f"{page} pages", run_id))
+            """, (status, loaded, f"{note}{page} pages", run_id))
             conn.commit()
-        except Exception:
+        except BaseException:  # also Ctrl+C, so the run is never left as "running"
             conn.rollback()
-            conn.execute("UPDATE raw.ingestion_runs SET finished_at = now(), status = 'failed' WHERE run_id = %s",
-                         (run_id,))
+            conn.execute("UPDATE raw.ingestion_runs SET finished_at = now(), status = 'failed', "
+                         "rows_loaded = %s, note = %s WHERE run_id = %s",
+                         (loaded, f"{note}{page} pages", run_id))
             conn.commit()
             raise
 

@@ -12,7 +12,7 @@ Numbers were checked against the live endpoints on **2026-09-25**. Elden Ring's 
 | **Update frequency** | Continuous. New reviews arrive every day, and existing ones can be edited or deleted |
 | **Volume** | 831,957 reviews in all languages (2026-09-25). **English: 573,286** (34,908 negative = 6.1 %) on 2026-10-08. About 1.1 KB per review as JSON, so a full English load is ~600 MB raw |
 | **Change rate** | About 100 English reviews are created or edited per day, so the daily incremental run is 1–2 pages. In our sample, 25–33 % of reviews had been edited after creation |
-| **Speed** | About 0.45 s per page of 100 reviews. A full backfill takes ~5,700 pages, about 1 hour with a 0.5 s pause between pages |
+| **Speed** | About 0.45 s per page of 100 reviews, but the rate limit (see below) caps the real throughput. A full backfill takes ~5,700 pages, a few hours |
 
 **Fields we use**
 
@@ -49,7 +49,7 @@ All other fields stay in the raw JSON and are not used. That includes `author.st
 - **Noise:** spam, memes, and empty or one-word reviews.
 - **Only roughly sorted:** the first page was not strictly in `timestamp_updated` order, so the loader stops only once a whole page is older than the high-water mark.
 - **Deletions are invisible** to incremental loads. A deleted review stays in our tables until a full reload.
-- **Rate limits:** they are undocumented, so we back off and retry. The one-time full backfill needs many requests.
+- **Rate limits:** undocumented. On 2026-10-08 Steam returned **HTTP 429** after ~160 requests in under 3 minutes. The response had no `Retry-After` header, and the block lifted after about 2.5 minutes. The loader waits 60 s on a 429, up to 10 times, and pauses 1 s between pages. The one-time full backfill needs many requests.
 
 ## 2. Steam global achievement percentages (fact, daily snapshot)
 

@@ -57,7 +57,8 @@ v0.1 runs locally (Docker, PostgreSQL). For the final milestone, the raw landing
 ├── docs/                 # dataset, use case, architecture, plan, ADRs
 ├── seeds/                # hand-maintained mapping tables
 ├── ingestion/            # batch ingestion scripts            (Milestone 2)
-├── sql/                  # schemas and transformations        (Milestone 2)
+├── sql/                  # init/ schemas, staging/ and transform/ SQL
+├── transform/            # runs seeds + sql/transform/ in one transaction
 ├── orchestration/        # orchestrator flows                 (Milestone 2)
 ├── infra/terraform/      # GCS bucket + BigQuery dataset      (Milestone 3)
 ├── pgadmin/              # pgAdmin server registration
@@ -142,16 +143,25 @@ You should see one row per day, each with 42 achievements.
 python -m ingestion.load_reviews --max-pages 3          # quick test (~2 s); doesn't move the high-water mark
 python -m ingestion.load_reviews --since 2026-10-01     # backfill everything updated since a date
 python -m ingestion.load_reviews                        # incremental (the first successful run is a full backfill)
+python -m ingestion.load_reviews --resume               # continue the last failed or killed run at its saved cursor
 ```
 
 How the loader works:
 - It pages through the reviews, newest-updated first, and stops once a whole page is older than the high-water mark.
 - It saves every page to `data/raw/reviews/<date>/run_<id>/` and upserts it into `raw.reviews`. Then `sql/staging/reviews.sql` updates `staging.reviews`.
-- Every run is logged in `raw.ingestion_runs`. Only a successful run moves the high-water mark, so a crashed run is simply fetched again on the next run.
-- A **full backfill** of about 573k English reviews takes roughly 5,700 pages, about 1 hour, and ~600 MB of raw files. A daily incremental run takes 1–2 pages.
+- Every run is logged in `raw.ingestion_runs`, along with the cursor of its last finished page.
+  - Only a successful run moves the high-water mark.
+  - A failed or killed run can be continued with `--resume`.
+- **Rate limits:** Steam returns HTTP 429 after roughly 150 fast requests and unblocks after a few minutes. The loader waits 60 s and tries again, up to 10 times, and pauses 1 s between pages.
+- **Full backfill:** about 573k English reviews in roughly 5,700 pages. It takes a few hours because of the rate limit, and the raw files take ~600 MB. If your laptop goes to sleep, run `--resume`.
+- **Daily incremental run:** 1–2 pages.
 
-If your database was created before `sql/init/02_ingestion_runs.sql` existed, apply it once:
-`docker compose exec -T postgres psql -U rage -d rage_index < sql/init/02_ingestion_runs.sql`
+If your database was created before the run log changed, add the new table and columns once:
+```bash
+docker compose exec -T postgres psql -U rage -d rage_index < sql/init/02_ingestion_runs.sql
+docker compose exec postgres psql -U rage -d rage_index -c "ALTER TABLE raw.ingestion_runs ADD COLUMN IF NOT EXISTS mark_from bigint, ADD COLUMN IF NOT EXISTS last_cursor text"
+```
+(A fresh `docker compose down -v && docker compose up -d` does the same.)
 
 **Verify:**
 
@@ -160,6 +170,26 @@ docker compose exec postgres psql -U rage -d rage_index -c "SELECT run_id, statu
 ```
 
 The latest run should show `success`, and `raw.reviews` and `staging.reviews` should hold the same number of rows. Running the loader again right away should load 0 reviews.
+
+**6. Transform: find boss mentions**
+
+```bash
+python -m transform.run
+```
+
+This command:
+1. Loads the two seed CSVs into `staging.boss_alias` and `staging.achievement_boss`.
+2. Runs every file in [`sql/transform/`](sql/transform/) in order:
+   - `01_review_boss_mention.sql` matches each review against the boss aliases on whole words, case-insensitive. It writes one row per review × boss mentioned.
+   - `02_boss_mentions_daily.sql` aggregates the matches into `mart.boss_mentions_daily`: one row per review date × boss, with mentions, negative mentions and median playtime in hours.
+
+Everything runs in one transaction, and both steps are full rebuilds, so running it again is safe.
+
+**Verify:**
+
+```bash
+docker compose exec postgres psql -U rage -d rage_index -c "SELECT boss_key, sum(mentions) AS mentions, sum(negative_mentions) AS negative FROM mart.boss_mentions_daily GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
+```
 
 ### Daily achievement snapshots (already running)
 
