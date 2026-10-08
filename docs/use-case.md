@@ -10,13 +10,22 @@ A content creator (guide writer / YouTuber) covering Elden Ring. They have limit
 2. **Who do players complain about?** Which bosses are mentioned in negative reviews more often than average?
 3. **When?** At what playtime (hours) are those reviews written?
 
-## Output tables
+## Data product
+
+The guide writer gets **one table**:
+
+| Table | One row per … | Main columns |
+|---|---|---|
+| `boss_rage_ranking` | boss (current state) | `dropoff_pct`, `negative_lift`, `mentions_total`, `median_playtime_h`, `rage_index`, `rank` |
+
+## Intermediate tables
+
+The ranking is built from two daily tables. They stay separate because they have different grains and come from different sources. They also keep the daily history, which lets us show trends over time. Steam does not give us the achievement history, so it only exists if we keep it.
 
 | Table | One row per … | Main columns |
 |---|---|---|
 | `boss_funnel_daily` | snapshot date × boss | `unlock_pct`, `dropoff_pct` |
 | `boss_mentions_daily` | review date × boss | `mentions`, `negative_mentions`, `median_playtime_h` |
-| `boss_rage_ranking` | boss (current state) | `dropoff_pct`, `negative_lift`, `mentions_total`, `rage_index`, `rank` |
 
 ## Rage-Quit Index (draft v0.1)
 

@@ -15,7 +15,7 @@ Together they give each boss a *Rage-Quit Index*.
 |---|---|
 | **Stakeholder** | An Elden Ring guide writer or YouTuber who has to decide which boss guide to make next |
 | **Questions** | 1. At which boss do the most players stop progressing? <br> 2. Which bosses show up more often in *negative* reviews? <br> 3. How many hours into the game does that happen? |
-| **Data product** | Curated tables `boss_funnel_daily`, `boss_mentions_daily` and `boss_rage_ranking` (see [docs/use-case.md](docs/use-case.md)) |
+| **Data product** | One ranked table, `boss_rage_ranking` (one row per boss), built from two daily intermediate tables (see [docs/use-case.md](docs/use-case.md)) |
 
 ## Data sources
 
