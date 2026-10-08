@@ -1,0 +1,48 @@
+# Daily achievement snapshot, runs on GitHub's servers so no laptop has to be on.
+# Steam has no history for this data, so a missed day is lost for good.
+# Files are committed to the `snapshots` branch, main stays code only.
+
+name: achievement snapshot
+
+on:
+  schedule:
+    - cron: "17 5 * * *"   # daily 05:17 UTC (GitHub may start scheduled runs a bit late)
+  workflow_dispatch:         # manual run from the Actions tab, for testing
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out the snapshots branch next to main
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin snapshots; then
+            git fetch origin snapshots
+            git worktree add -B snapshots "$RUNNER_TEMP/snapshots" origin/snapshots
+          else
+            git worktree add --orphan -b snapshots "$RUNNER_TEMP/snapshots"
+          fi
+
+      - name: Take snapshot
+        run: python ingestion/snapshot_achievements.py --data-dir "$RUNNER_TEMP/snapshots"
+
+      - name: Commit and push
+        working-directory: ${{ runner.temp }}/snapshots
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing new"
+          else
+            git commit -m "achievement snapshot $(date -u +%F)"
+            git push origin snapshots
+          fi

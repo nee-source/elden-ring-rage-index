@@ -79,6 +79,27 @@ Plan and backlog: [docs/project-plan.md](docs/project-plan.md)
 The pipeline can't be run yet. Setup, run and verification instructions will come with Milestone 2.
 You'll need Docker / Docker Compose and Python 3.11+. No API key is needed. To configure, copy `.env.example` to `.env`, and never commit `.env`.
 
+### Daily achievement snapshots (already running)
+
+Steam only provides the *current* achievement percentages, so a missed day can never be recovered. That's why this one job doesn't depend on anyone's laptop being on. It runs every day on GitHub Actions ([`.github/workflows/snapshot-achievements.yml`](.github/workflows/snapshot-achievements.yml)) and commits the result to the **`snapshots`** branch:
+
+```
+snapshots branch:  achievements/<YYYY-MM-DD>/achievements.json
+```
+
+Run the same script locally (Python 3.11+, standard library only):
+
+```bash
+python ingestion/snapshot_achievements.py              # writes data/raw/achievements/<today>/achievements.json
+python ingestion/snapshot_achievements.py --data-dir /tmp/raw
+```
+
+**Verify:**
+- The *Actions* tab shows a green "achievement snapshot" run for each day.
+- The `snapshots` branch contains one folder per day.
+- Each file holds 42 achievements.
+- Running the script again on the same day overwrites that day's file instead of adding a second one.
+
 ## Known limitations (v0.1)
 
 - **No history from the source:** Steam only provides today's achievement percentages. History exists only from the day we start snapshotting, and it can't be backfilled.

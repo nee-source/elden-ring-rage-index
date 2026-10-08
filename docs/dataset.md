@@ -60,6 +60,7 @@ All other fields stay in the raw JSON and are not used. That includes `author.st
 
 **Data-quality risks**
 
+- **Percent is a string:** the API returns `percent` as text (`"75.0"`), so staging casts it to a number.
 - **Code names only:** the API returns codes like `ACH25`, not boss names. `seeds/achievement_boss_map.csv` maps each code to a boss.
 - **No history:** a missed daily snapshot is lost for good.
 - **All owners count:** the percentage is a share of *all owners*, including people who never really played.
