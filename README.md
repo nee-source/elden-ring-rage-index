@@ -62,7 +62,8 @@ v0.1 runs locally (Docker, PostgreSQL). For the final milestone, the raw landing
 ├── orchestration/        # orchestrator flows                 (Milestone 2)
 ├── infra/terraform/      # GCS bucket + BigQuery dataset      (Milestone 3)
 ├── pgadmin/              # pgAdmin server registration
-├── docker-compose.yml    # PostgreSQL + pgAdmin on network rage-net
+├── Dockerfile            # pipeline image (ingestion + transform)
+├── docker-compose.yml    # PostgreSQL + pgAdmin + pipeline on network rage-net
 ├── data/                 # local data, never committed
 └── .env.example          # environment variables (no real secrets)
 ```
@@ -190,6 +191,29 @@ Everything runs in one transaction, and both steps are full rebuilds, so running
 ```bash
 docker compose exec postgres psql -U rage -d rage_index -c "SELECT boss_key, sum(mentions) AS mentions, sum(negative_mentions) AS negative FROM mart.boss_mentions_daily GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
 ```
+
+### Run the pipeline in Docker
+
+Steps 4–6 can also run in a container, so you only need Docker. `docker compose up -d` does **not** start this container; it only runs on demand:
+
+```bash
+docker compose build pipeline                                     # once, and after every code change
+docker compose run --rm pipeline                                  # daily batch: achievements -> reviews -> transform
+docker compose run --rm pipeline python -m ingestion.load_reviews --resume   # or any single step
+```
+
+- The image (see [`Dockerfile`](Dockerfile)) holds the code, `sql/` and `seeds/`.
+- It joins `rage-net` and reaches the database as host `postgres`. The other settings come from `.env`.
+- `./data` is mounted, so raw files land in the same place as when you run on your machine.
+- `sync_snapshots` stays on your machine (step 4), because it needs `git` and your GitHub access.
+
+**Verify:**
+
+```bash
+docker compose run --rm pipeline python -m transform.run
+```
+
+The log should show the seeds (23 aliases, 42 achievements) and a row count for each transform file. The verify queries from steps 4–6 should give the same results as before.
 
 ### Daily achievement snapshots (already running)
 

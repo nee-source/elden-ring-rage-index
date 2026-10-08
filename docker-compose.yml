@@ -1,6 +1,5 @@
-# Local stack for the midterm: PostgreSQL + pgAdmin on one shared network.
-# Values come from .env (copy .env.example first).
-# The ingestion service joins the same network once the loaders exist.
+# Local stack for the midterm: PostgreSQL + pgAdmin + the pipeline image, on one
+# shared network. Values come from .env (copy .env.example first).
 
 services:
   postgres:
@@ -38,6 +37,29 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - rage-net
+
+  # one-off jobs, not a server: only starts with "docker compose run --rm pipeline ..."
+  pipeline:
+    build: .
+    image: rage-pipeline
+    profiles: ["jobs"]
+    env_file: .env
+    environment:
+      # inside the network, Postgres is the service "postgres" on its internal port
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # default: the daily batch; pass a command to run a single step instead
+    command: >
+      sh -c "python -m ingestion.load_achievements &&
+             python -m ingestion.load_reviews &&
+             python -m transform.run"
     networks:
       - rage-net
 

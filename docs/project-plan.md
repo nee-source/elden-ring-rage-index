@@ -21,9 +21,9 @@ Deadlines (Europe/Zurich):
 - [x] Daily achievement snapshot job, **first**, because its history can't be backfilled (B). It runs on GitHub Actions and writes to the `snapshots` branch
 - [x] Load the snapshot files from the `snapshots` branch into PostgreSQL (B)
 - [x] Review ingestion: cursor pagination, retries, high-water mark, run log (A)
-- [ ] Full review backfill (~1 h) (A)
+- [ ] Full review backfill (a few hours because of the rate limit; resumable) (A)
 - [x] Docker Compose with PostgreSQL + pgAdmin on a shared network (B)
-- [ ] Add the ingestion service to Docker Compose once the loaders exist (B)
+- [x] Pipeline image (`Dockerfile`) as a `pipeline` service in Docker Compose on `rage-net` (B)
 - [x] PostgreSQL raw/staging/mart schemas (B)
 - [x] First transformation: boss matching → `staging.review_boss_mention` → `mart.boss_mentions_daily` (A)
 - [ ] Check matching precision on a sample of reviews (A)
