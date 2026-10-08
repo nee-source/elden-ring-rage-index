@@ -1,0 +1,48 @@
+# Local stack for the midterm: PostgreSQL + pgAdmin on one shared network.
+# Values come from .env (copy .env.example first).
+# The ingestion service joins the same network once the loaders exist.
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: rage-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # runs once, only when the volume is empty (reset with: docker compose down -v)
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - rage-net
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    container_name: rage-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "${PGADMIN_PORT:-8080}:80"
+    volumes:
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rage-net
+
+volumes:
+  pgdata:
+
+networks:
+  rage-net:

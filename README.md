@@ -60,6 +60,8 @@ v0.1 runs locally (Docker, PostgreSQL). For the final milestone, the raw landing
 ├── sql/                  # schemas and transformations        (Milestone 2)
 ├── orchestration/        # orchestrator flows                 (Milestone 2)
 ├── infra/terraform/      # GCS bucket + BigQuery dataset      (Milestone 3)
+├── pgadmin/              # pgAdmin server registration
+├── docker-compose.yml    # PostgreSQL + pgAdmin on network rage-net
 ├── data/                 # local data, never committed
 └── .env.example          # environment variables (no real secrets)
 ```
@@ -76,8 +78,38 @@ Plan and backlog: [docs/project-plan.md](docs/project-plan.md)
 
 ## Setup
 
-The pipeline can't be run yet. Setup, run and verification instructions will come with Milestone 2.
-You'll need Docker / Docker Compose and Python 3.11+. No API key is needed. To configure, copy `.env.example` to `.env`, and never commit `.env`.
+Requirements: Docker Desktop (or Docker Engine + Compose v2) and Python 3.11+. No API key is needed.
+
+**1. Configure**
+
+```bash
+cp .env.example .env        # local dev values; never commit .env
+```
+
+**2. Start PostgreSQL + pgAdmin**
+
+```bash
+docker compose up -d
+docker compose ps           # rage-postgres should be "healthy"
+```
+
+On first start, Postgres creates the `raw`, `staging` and `mart` schemas and their tables from [`sql/init/01_schemas.sql`](sql/init/01_schemas.sql). Both containers share the `rage-net` network.
+
+**Verify:**
+
+```bash
+docker compose exec postgres psql -U rage -d rage_index -c "\dn" -c "\dt raw.*" -c "\dt staging.*"
+```
+
+This should list the schemas `raw`, `staging` and `mart`, plus the tables `raw.achievement_snapshots`, `raw.reviews`, `staging.achievement_snapshot` and `staging.reviews`.
+
+For pgAdmin, open http://localhost:8080. The server "rage-index (local)" is already registered; the password is `POSTGRES_PASSWORD` from `.env`.
+
+**Reset:**
+- `docker compose down` stops the containers and keeps the data.
+- `docker compose down -v` also deletes the database. The init script only runs on an empty database, so use `-v` after changing it.
+
+If port 5432 or 8080 is already in use on your machine, change `POSTGRES_PORT` or `PGADMIN_PORT` in `.env`.
 
 ### Daily achievement snapshots (already running)
 
