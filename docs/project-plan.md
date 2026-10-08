@@ -19,7 +19,7 @@ Deadlines (Europe/Zurich):
 ## Milestone 2: Midterm (W4–W6)
 
 - [x] Daily achievement snapshot job, **first**, because its history can't be backfilled (B). It runs on GitHub Actions and writes to the `snapshots` branch
-- [ ] Load the snapshot files from the `snapshots` branch into PostgreSQL (B)
+- [x] Load the snapshot files from the `snapshots` branch into PostgreSQL (B)
 - [ ] Review ingestion: cursor pagination, retries, high-water mark (A)
 - [x] Docker Compose with PostgreSQL + pgAdmin on a shared network (B)
 - [ ] Add the ingestion service to Docker Compose once the loaders exist (B)

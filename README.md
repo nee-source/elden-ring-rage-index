@@ -111,6 +111,31 @@ For pgAdmin, open http://localhost:8080. The server "rage-index (local)" is alre
 
 If port 5432 or 8080 is already in use on your machine, change `POSTGRES_PORT` or `PGADMIN_PORT` in `.env`.
 
+**3. Python environment**
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**4. Load the achievement snapshots**
+
+```bash
+python -m ingestion.sync_snapshots      # snapshots branch -> data/raw/achievements/<date>/
+python -m ingestion.load_achievements   # files -> raw.achievement_snapshots -> staging.achievement_snapshot
+```
+
+`sync_snapshots` fetches the `snapshots` branch and copies its files into `data/raw`, so you never have to switch branches. `load_achievements` upserts every file. Running it again changes nothing.
+
+**Verify:**
+
+```bash
+docker compose exec postgres psql -U rage -d rage_index -c "SELECT snapshot_date, count(*) FROM staging.achievement_snapshot GROUP BY 1 ORDER BY 1"
+```
+
+You should see one row per day, each with 42 achievements.
+
 ### Daily achievement snapshots (already running)
 
 Steam only provides the *current* achievement percentages, so a missed day can never be recovered. That's why this one job doesn't depend on anyone's laptop being on. It runs every day on GitHub Actions ([`.github/workflows/snapshot-achievements.yml`](.github/workflows/snapshot-achievements.yml)) and commits the result to the **`snapshots`** branch:
