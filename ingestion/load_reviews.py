@@ -98,7 +98,9 @@ def fetch_page(app_id, language, cursor):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--since", help="load everything updated since this date (YYYY-MM-DD)")
+    # REVIEWS_SINCE lets the orchestrator pass a backfill date; empty = incremental
+    parser.add_argument("--since", default=os.getenv("REVIEWS_SINCE") or None,
+                        help="load everything updated since this date (YYYY-MM-DD)")
     parser.add_argument("--full", action="store_true", help="ignore the high-water mark")
     parser.add_argument("--resume", action="store_true", help="continue the last failed run")
     parser.add_argument("--max-pages", type=int, help="stop after N pages (test run)")

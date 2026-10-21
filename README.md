@@ -1,6 +1,6 @@
 # Elden Ring Boss Rage-Quit Index
 
-> DENG HS26 — End-to-End Batch Data Pipeline · Team XX · Status: **Milestone 1 (Architecture v0.1)**
+> DENG HS26 — End-to-End Batch Data Pipeline · Team XX · Status: **Milestone 2 (midterm, Architecture v0.2)**
 
 Which Elden Ring boss makes players give up? This project combines two public Steam sources:
 
@@ -30,24 +30,24 @@ Plus two small hand-made seed tables in `seeds/`, versioned in git:
 
 Details (schema, volume, quality risks): [docs/dataset.md](docs/dataset.md)
 
-## Architecture v0.1
+## Architecture v0.2
 
 ```mermaid
 flowchart LR
-    R[Steam reviews API] --> I[Python batch ingestion]
-    A[Steam achievement %] --> I
-    I --> L[(Raw JSON landing)]
-    L --> P[(PostgreSQL<br/>staging)]
-    SEED[seeds/*.csv] --> T
-    P --> T[Transform:<br/>match bosses,<br/>funnel, index]
-    T --> M[(Curated tables)]
-    M --> U[Guide writer:<br/>SQL / dashboard]
-    O{{Orchestrator: daily schedule,<br/>retries, backfills}} -.-> I & T
+    A[Steam achievement %] --> GA[GitHub Actions<br/>daily snapshot]
+    GA --> SB[(snapshots branch)]
+    R[Steam reviews API] --> P
+    SB --> P[rage-pipeline image:<br/>sync · load achievements ·<br/>load reviews · transform]
+    K{{Kestra: daily 08:00,<br/>retries, reruns, backfill}} -.runs.-> P
+    P --> RAW[(PostgreSQL raw)] --> STG[(staging)] --> MART[(mart)]
+    SEED[seeds/*.csv] --> P
+    MART --> U[Guide writer:<br/>SQL / pgAdmin]
 ```
 
-v0.1 runs locally (Docker, PostgreSQL). For the final milestone, the raw landing moves to **Google Cloud Storage** and the curated layer to **BigQuery**, both provisioned with Terraform.
+Everything except the GitHub Actions snapshot runs locally in Docker Compose on the network `rage-net`: PostgreSQL, pgAdmin, Kestra and the pipeline image. For the final milestone, the raw landing moves to **Google Cloud Storage** and the curated layer to **BigQuery**, both provisioned with Terraform.
 
-- Full description: [docs/architecture-v0.1.md](docs/architecture-v0.1.md)
+- Full description, the grain of every table, failure handling, and changes since v0.1: [docs/architecture-v0.2.md](docs/architecture-v0.2.md)
+- Pitch version: [docs/architecture-v0.1.md](docs/architecture-v0.1.md)
 - Why these sources: [docs/adr/0001-data-source-selection.md](docs/adr/0001-data-source-selection.md)
 
 ## Repository structure
@@ -56,14 +56,15 @@ v0.1 runs locally (Docker, PostgreSQL). For the final milestone, the raw landing
 .
 ├── docs/                 # dataset, use case, architecture, plan, ADRs
 ├── seeds/                # hand-maintained mapping tables
-├── ingestion/            # batch ingestion scripts            (Milestone 2)
+├── ingestion/            # one module per source + snapshot sync
 ├── sql/                  # init/ schemas, staging/ and transform/ SQL
 ├── transform/            # runs seeds + sql/transform/ in one transaction
-├── orchestration/        # orchestrator flows                 (Milestone 2)
+├── orchestration/flows/  # Kestra flow (daily pipeline)
 ├── infra/terraform/      # GCS bucket + BigQuery dataset      (Milestone 3)
 ├── pgadmin/              # pgAdmin server registration
 ├── Dockerfile            # pipeline image (ingestion + transform)
-├── docker-compose.yml    # PostgreSQL + pgAdmin + pipeline on network rage-net
+├── docker-compose.yml    # PostgreSQL + pgAdmin + Kestra + pipeline on network rage-net
+├── .github/workflows/    # daily achievement snapshot
 ├── data/                 # local data, never committed
 └── .env.example          # environment variables (no real secrets)
 ```
@@ -72,73 +73,135 @@ v0.1 runs locally (Docker, PostgreSQL). For the final milestone, the raw landing
 
 | Milestone | Date | Status |
 |---|---|---|
-| 1. Pitch, Architecture v0.1 | 01.10.2026 | in progress |
-| 2. Midterm: local pipeline (Docker, PostgreSQL, orchestration) | repo 22.10.2026, defence 29.10.2026 | planned |
+| 1. Pitch, Architecture v0.1 | 01.10.2026 | done |
+| 2. Midterm: local pipeline (Docker, PostgreSQL, orchestration) | repo 22.10.2026, defence 29.10.2026 | submitted: tag `v0.2-midterm` |
 | 3. Final: cloud pipeline (Terraform, GCS, BigQuery, modeling, DQ) | repo 10.12.2026, defence 17.12.2026 | planned |
 
 Plan and backlog: [docs/project-plan.md](docs/project-plan.md)
 
-## Setup
+## Setup and run
 
-Requirements: Docker Desktop (or Docker Engine + Compose v2) and Python 3.11+. No API key is needed.
+You only need **Docker Desktop** (or Docker Engine + Compose v2). No API key and no local Python are needed. Running single steps on your machine without Kestra is optional (see [Run single steps](#run-single-steps-without-kestra)).
 
-**1. Configure**
+### 1. Configure
 
 ```bash
+git clone https://github.com/nee-source/elden-ring-rage-index.git
+cd elden-ring-rage-index
 cp .env.example .env        # local dev values; never commit .env
 ```
 
-**2. Start PostgreSQL + pgAdmin**
+If port 5432, 8080 or 8090 is already in use on your machine, change `POSTGRES_PORT`, `PGADMIN_PORT` or `KESTRA_PORT` in `.env`.
+
+### 2. Start the stack and build the pipeline image
 
 ```bash
-docker compose up -d
-docker compose ps           # rage-postgres should be "healthy"
+docker compose up -d                 # postgres, pgadmin, kestra on network rage-net
+docker compose build pipeline        # the image Kestra runs for every task
+docker compose ps                    # rage-postgres "healthy", rage-pgadmin and rage-kestra "Up"
 ```
 
-On first start, Postgres creates the `raw`, `staging` and `mart` schemas and their tables from [`sql/init/01_schemas.sql`](sql/init/01_schemas.sql). Both containers share the `rage-net` network.
+On first start, Postgres runs [`sql/init/`](sql/init/). This creates:
+- the schemas `raw`, `staging` and `mart` with their tables,
+- the run log `raw.ingestion_runs`,
+- a separate database `kestra` for Kestra's own state.
+
+Kestra needs about 30 s before its UI answers.
 
 **Verify:**
 
 ```bash
-docker compose exec postgres psql -U rage -d rage_index -c "\dn" -c "\dt raw.*" -c "\dt staging.*"
+docker compose exec postgres psql -U rage -d rage_index -c "\dn" -c "\dt raw.*" -c "\dt staging.*" -c "\dt mart.*"
 ```
 
-This should list the schemas `raw`, `staging` and `mart`, plus the tables `raw.achievement_snapshots`, `raw.reviews`, `staging.achievement_snapshot` and `staging.reviews`.
+This should list the schemas `raw`, `staging` and `mart` and these tables:
+- `raw`: `achievement_snapshots`, `ingestion_runs`, `reviews`
+- `staging`: `achievement_boss`, `achievement_snapshot`, `boss_alias`, `review_boss_mention`, `reviews`
+- `mart`: `boss_mentions_daily`
+
+### 3. Run the pipeline in Kestra
+
+1. Open http://localhost:8090 and log in with `KESTRA_USER` / `KESTRA_PASSWORD` from `.env`.
+2. Go to **Flows → rage → daily_pipeline**. The flow is loaded from [`orchestration/flows/rage_daily_pipeline.yml`](orchestration/flows/rage_daily_pipeline.yml).
+3. Click **Execute**. For a quick first run, set **since** to a date about 7 days ago (e.g. `2026-10-14`). That loads a few hundred reviews in about 1 minute.
+
+   If you leave `since` empty on an empty database, the first run is the **full backfill**: ~573k reviews, about 3 hours because of Steam's rate limit.
+4. Wait until all four tasks are green:
+
+| Task | What it does |
+|---|---|
+| `sync_snapshots` | downloads the daily achievement files from the `snapshots` branch |
+| `load_achievements` | files → `raw.achievement_snapshots` → `staging.achievement_snapshot` |
+| `load_reviews` | Steam reviews → raw files + `raw.reviews` → `staging.reviews` (incremental, high-water mark) |
+| `transform` | seeds + boss matching → `staging.review_boss_mention` → `mart.boss_mentions_daily` |
+
+Each task runs the `rage-pipeline` image as its own container on `rage-net`. Raw files are kept in the Docker volume `rage-raw`.
+
+**Verify:**
+
+```bash
+docker compose exec postgres psql -U rage -d rage_index \
+  -c "SELECT snapshot_date, count(*) FROM staging.achievement_snapshot GROUP BY 1 ORDER BY 1" \
+  -c "SELECT run_id, status, rows_loaded, note FROM raw.ingestion_runs ORDER BY run_id DESC LIMIT 3" \
+  -c "SELECT (SELECT count(*) FROM raw.reviews) AS raw_reviews, (SELECT count(*) FROM staging.reviews) AS staging_reviews" \
+  -c "SELECT boss_key, sum(mentions) AS mentions, sum(negative_mentions) AS negative FROM mart.boss_mentions_daily GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
+```
+
+You should see:
+1. One row per snapshot day, each with 42 achievements. The snapshots start on 2026-10-08.
+2. The latest run with `success`.
+3. Nearly the same number of rows in raw and staging. Staging can be a few rows smaller: Steam sometimes returns non-English reviews, and staging drops them.
+4. The top 10 bosses by mentions.
+
+Execute the flow again without `since`: `load_reviews` now loads (almost) 0 reviews, and all counts stay the same. That is the incremental load and idempotency check.
+
+### 4. Schedule, retries, reruns and backfills
+
+- **Schedule:** the trigger `daily` runs the flow every day at 08:00 Europe/Zurich, after the GitHub Actions snapshot (05:17 UTC). It only fires while the stack is running.
+- **Retries:** every task retries up to 3 times, 2 minutes apart. `load_reviews` has a 6 h timeout for the full backfill. Steam's rate limit is handled inside the loader (it waits 60 s on HTTP 429).
+- **Reruns:** all steps are idempotent: upserts on natural keys, and full rebuilds in the transform. So a failed execution can be restarted from the failed task (**Executions → Restart**), or the whole flow can be run again.
+- **Backfill:**
+  - **Reviews:** set the input `since` to a date. Everything updated since then is loaded again and upserted.
+  - **Missed schedule dates:** use **Triggers → daily → Backfill**. Each run is incremental, so a backfilled date simply catches up.
+  - **Achievement history** cannot be backfilled: Steam only returns today's values. That's why the snapshot runs on GitHub Actions and not on a laptop.
+
+**Edit a flow:** change the file in `orchestration/flows/`, then run `docker compose restart kestra`. Flows are loaded at startup.
+
+**Reset:**
+- `docker compose down` stops everything and keeps the data.
+- `docker compose down -v` also deletes the database, Kestra's state and the raw files. The init scripts only run on an empty database, so use `-v` after changing them.
+
+**Database from before 2026-10-21?** Kestra needs its own database. Create it once:
+```bash
+docker compose exec postgres psql -U rage -d rage_index -c "CREATE DATABASE kestra"
+```
 
 For pgAdmin, open http://localhost:8080. The server "rage-index (local)" is already registered; the password is `POSTGRES_PASSWORD` from `.env`.
 
-**Reset:**
-- `docker compose down` stops the containers and keeps the data.
-- `docker compose down -v` also deletes the database. The init script only runs on an empty database, so use `-v` after changing it.
+### Run single steps without Kestra
 
-If port 5432 or 8080 is already in use on your machine, change `POSTGRES_PORT` or `PGADMIN_PORT` in `.env`.
-
-**3. Python environment**
+The same steps run with `docker compose run` (Docker only) or with local Python (3.11+, for development).
 
 ```bash
+# in the pipeline container (uses ./data for raw files)
+docker compose run --rm pipeline                                              # all four steps in order
+docker compose run --rm pipeline python -m ingestion.load_reviews --resume    # or any single step
+
+# or locally
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-**4. Load the achievement snapshots**
-
-```bash
 python -m ingestion.sync_snapshots      # snapshots branch -> data/raw/achievements/<date>/
 python -m ingestion.load_achievements   # files -> raw.achievement_snapshots -> staging.achievement_snapshot
+python -m ingestion.load_reviews        # reviews -> raw.reviews -> staging.reviews
+python -m transform.run                 # seeds + sql/transform/*.sql in one transaction
 ```
 
-`sync_snapshots` fetches the `snapshots` branch and copies its files into `data/raw`, so you never have to switch branches. `load_achievements` upserts every file. Running it again changes nothing.
+**`sync_snapshots`** downloads the `snapshots` branch as a tar.gz over HTTPS. The repo is public, so it needs no git and no login.
 
-**Verify:**
+**`load_achievements`** upserts every file. Running it again changes nothing.
 
-```bash
-docker compose exec postgres psql -U rage -d rage_index -c "SELECT snapshot_date, count(*) FROM staging.achievement_snapshot GROUP BY 1 ORDER BY 1"
-```
-
-You should see one row per day, each with 42 achievements.
-
-**5. Load the reviews**
+**`load_reviews` options:**
 
 ```bash
 python -m ingestion.load_reviews --max-pages 3          # quick test (~2 s); doesn't move the high-water mark
@@ -147,73 +210,23 @@ python -m ingestion.load_reviews                        # incremental (the first
 python -m ingestion.load_reviews --resume               # continue the last failed or killed run at its saved cursor
 ```
 
-How the loader works:
+How the review loader works:
 - It pages through the reviews, newest-updated first, and stops once a whole page is older than the high-water mark.
 - It saves every page to `data/raw/reviews/<date>/run_<id>/` and upserts it into `raw.reviews`. Then `sql/staging/reviews.sql` updates `staging.reviews`.
 - Every run is logged in `raw.ingestion_runs`, along with the cursor of its last finished page.
   - Only a successful run moves the high-water mark.
   - A failed or killed run can be continued with `--resume`.
 - **Rate limits:** Steam returns HTTP 429 after roughly 150 fast requests and unblocks after a few minutes. The loader waits 60 s and tries again, up to 10 times, and pauses 1 s between pages.
-- **Full backfill:** about 573k English reviews in roughly 5,700 pages. Our run took 3 h 14 min because of the rate limit, and the raw files take 580 MB. If your laptop goes to sleep, run `--resume`.
+- **Full backfill:** about 573k English reviews in roughly 5,700 pages. Our run took 3 h 14 min because of the rate limit, and the raw files take 580 MB.
 - **Daily incremental run:** 1–2 pages.
 
-If your database was created before the run log changed, add the new table and columns once:
-```bash
-docker compose exec -T postgres psql -U rage -d rage_index < sql/init/02_ingestion_runs.sql
-docker compose exec postgres psql -U rage -d rage_index -c "ALTER TABLE raw.ingestion_runs ADD COLUMN IF NOT EXISTS mark_from bigint, ADD COLUMN IF NOT EXISTS last_cursor text"
-```
-(A fresh `docker compose down -v && docker compose up -d` does the same.)
-
-**Verify:**
-
-```bash
-docker compose exec postgres psql -U rage -d rage_index -c "SELECT run_id, status, rows_loaded, note FROM raw.ingestion_runs ORDER BY run_id DESC LIMIT 5" -c "SELECT count(*), count(*) FILTER (WHERE NOT voted_up) AS negative FROM staging.reviews"
-```
-
-The latest run should show `success`, and `raw.reviews` and `staging.reviews` should hold the same number of rows. Running the loader again right away should load 0 reviews.
-
-**6. Transform: find boss mentions**
-
-```bash
-python -m transform.run
-```
-
-This command:
-1. Loads the two seed CSVs into `staging.boss_alias` and `staging.achievement_boss`.
-2. Runs every file in [`sql/transform/`](sql/transform/) in order:
+**`transform.run`** does two things:
+1. It loads the two seed CSVs into `staging.boss_alias` and `staging.achievement_boss`.
+2. It runs every file in [`sql/transform/`](sql/transform/) in order:
    - `01_review_boss_mention.sql` matches each review against the boss aliases on whole words, case-insensitive. It writes one row per review × boss mentioned.
    - `02_boss_mentions_daily.sql` aggregates the matches into `mart.boss_mentions_daily`: one row per review date × boss, with mentions, negative mentions and median playtime in hours.
 
-Everything runs in one transaction, and both steps are full rebuilds, so running it again is safe.
-
-**Verify:**
-
-```bash
-docker compose exec postgres psql -U rage -d rage_index -c "SELECT boss_key, sum(mentions) AS mentions, sum(negative_mentions) AS negative FROM mart.boss_mentions_daily GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
-```
-
-### Run the pipeline in Docker
-
-Steps 4–6 can also run in a container, so you only need Docker. `docker compose up -d` does **not** start this container; it only runs on demand:
-
-```bash
-docker compose build pipeline                                     # once, and after every code change
-docker compose run --rm pipeline                                  # daily batch: achievements -> reviews -> transform
-docker compose run --rm pipeline python -m ingestion.load_reviews --resume   # or any single step
-```
-
-- The image (see [`Dockerfile`](Dockerfile)) holds the code, `sql/` and `seeds/`.
-- It joins `rage-net` and reaches the database as host `postgres`. The other settings come from `.env`.
-- `./data` is mounted, so raw files land in the same place as when you run on your machine.
-- `sync_snapshots` stays on your machine (step 4), because it needs `git` and your GitHub access.
-
-**Verify:**
-
-```bash
-docker compose run --rm pipeline python -m transform.run
-```
-
-The log should show the seeds (23 aliases, 42 achievements) and a row count for each transform file. The verify queries from steps 4–6 should give the same results as before.
+Everything runs in one transaction, and both steps are full rebuilds, so running it again is safe. On the full data it takes about 15 s.
 
 ### Daily achievement snapshots (already running)
 
@@ -236,12 +249,17 @@ python ingestion/snapshot_achievements.py --data-dir /tmp/raw
 - Each file holds 42 achievements.
 - Running the script again on the same day overwrites that day's file instead of adding a second one.
 
-## Known limitations (v0.1)
+## Known limitations (v0.2)
 
-- **No history from the source:** Steam only provides today's achievement percentages. History exists only from the day we start snapshotting, and it can't be backfilled.
+- **No history from the source:** Steam only provides today's achievement percentages. Our history starts on 2026-10-08 and can't be backfilled.
+- **Schedule needs a running stack:** Kestra's daily trigger only fires while Docker Compose is up. Missed days can be caught up with a trigger backfill. The achievement snapshot doesn't depend on this, because it runs on GitHub Actions.
+- **Full backfill is slow:** ~3 h because of Steam's undocumented rate limit. For a quick check, use the `since` input.
 - **English only:** we only analyse English reviews.
-- **Name matching:** boss mentions are found by matching names and nicknames from our seed table. Expect some false positives and misses.
+- **Name matching:** boss mentions are found by matching names and nicknames from our seed table. Expect some false positives (e.g. the spell *Meteorite of Astel*) and misses. Precision is being measured on a labelled sample.
+- **Deleted reviews** stay in our tables until a full reload. Incremental loads can't see deletions.
 - **Not true churn:** achievement % is a share of *all owners*, including people who never really played. Drop-offs compare bosses to each other; they don't measure how many players quit overall.
+- **Not built yet:** the funnel table and the data product `boss_rage_ranking`. Both are planned for the final milestone.
+- **Local secrets:** Kestra passes the Postgres password to the task containers as an environment variable from `.env`. That's fine for local development; the cloud version will use a secret manager.
 
 ## Team
 

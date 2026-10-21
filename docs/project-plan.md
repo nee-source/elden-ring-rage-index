@@ -27,8 +27,9 @@ Deadlines (Europe/Zurich):
 - [x] PostgreSQL raw/staging/mart schemas (B)
 - [x] First transformation: boss matching → `staging.review_boss_mention` → `mart.boss_mentions_daily` (A)
 - [ ] Check matching precision on a sample of reviews (A)
-- [ ] Orchestrator: daily schedule, retries, backfill by date range (A)
-- [ ] Architecture v0.2, plus setup/run/verification steps in the README (A + B)
+- [x] Orchestrator: Kestra flow with a daily schedule, retries, restarts and a `since` backfill (A)
+- [x] Architecture v0.2, plus setup/run/verification steps in the README (A + B)
+- [x] Clean-clone test following the README (2026-10-21) (A + B)
 - [ ] Tag `v0.2-midterm` and submit on ILIAS (A + B)
 
 ## Milestone 3: Final (W7–W13)
