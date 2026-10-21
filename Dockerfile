@@ -14,4 +14,6 @@ COPY seeds/ seeds/
 
 # raw files land here; docker-compose mounts ./data so they survive the container
 ENV RAW_DATA_DIR=/app/data/raw
+# Kestra starts the container in its own working directory, so tell Python where the code is
+ENV PYTHONPATH=/app
 # no CMD: docker-compose (and later the orchestrator) says which step to run

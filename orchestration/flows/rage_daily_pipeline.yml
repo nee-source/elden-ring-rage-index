@@ -1,0 +1,98 @@
+# Daily batch: snapshots -> achievements -> reviews -> transform.
+# Every task runs the rage-pipeline image (build it with: docker compose build pipeline)
+# on the rage-net network, so it reaches Postgres as host "postgres".
+# All steps are idempotent, so retries, reruns and backfills are safe.
+id: daily_pipeline
+namespace: rage
+
+inputs:
+  - id: since
+    type: STRING
+    required: false
+    description: Backfill reviews updated since this date (YYYY-MM-DD). Leave empty for the normal incremental load.
+
+tasks:
+  - id: sync_snapshots
+    type: io.kestra.plugin.docker.cli.Run
+    containerImage: rage-pipeline
+    pullPolicy: NEVER              # local image, not on a registry
+    networkMode: rage-net
+    volumes:
+      - rage-raw:/app/data         # raw files survive the task containers
+    env:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "{{ envs.postgres_db }}"
+      POSTGRES_USER: "{{ envs.postgres_user }}"
+      POSTGRES_PASSWORD: "{{ envs.postgres_password }}"
+    commands: [python, -m, ingestion.sync_snapshots]
+    retry:
+      type: constant
+      interval: PT2M
+      maxAttempts: 3
+
+  - id: load_achievements
+    type: io.kestra.plugin.docker.cli.Run
+    containerImage: rage-pipeline
+    pullPolicy: NEVER              # local image, not on a registry
+    networkMode: rage-net
+    volumes:
+      - rage-raw:/app/data         # raw files survive the task containers
+    env:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "{{ envs.postgres_db }}"
+      POSTGRES_USER: "{{ envs.postgres_user }}"
+      POSTGRES_PASSWORD: "{{ envs.postgres_password }}"
+    commands: [python, -m, ingestion.load_achievements]
+    retry:
+      type: constant
+      interval: PT2M
+      maxAttempts: 3
+
+  - id: load_reviews
+    type: io.kestra.plugin.docker.cli.Run
+    containerImage: rage-pipeline
+    pullPolicy: NEVER              # local image, not on a registry
+    networkMode: rage-net
+    volumes:
+      - rage-raw:/app/data         # raw files survive the task containers
+    env:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "{{ envs.postgres_db }}"
+      POSTGRES_USER: "{{ envs.postgres_user }}"
+      POSTGRES_PASSWORD: "{{ envs.postgres_password }}"
+      REVIEWS_SINCE: "{{ inputs.since ?? '' }}"
+    commands: [python, -m, ingestion.load_reviews]
+    retry:
+      type: constant
+      interval: PT2M
+      maxAttempts: 3
+    timeout: PT6H                  # a full backfill takes ~3 h because of the Steam rate limit
+
+  - id: transform
+    type: io.kestra.plugin.docker.cli.Run
+    containerImage: rage-pipeline
+    pullPolicy: NEVER              # local image, not on a registry
+    networkMode: rage-net
+    volumes:
+      - rage-raw:/app/data         # raw files survive the task containers
+    env:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "{{ envs.postgres_db }}"
+      POSTGRES_USER: "{{ envs.postgres_user }}"
+      POSTGRES_PASSWORD: "{{ envs.postgres_password }}"
+    commands: [python, -m, transform.run]
+    retry:
+      type: constant
+      interval: PT2M
+      maxAttempts: 3
+
+triggers:
+  # the GitHub Actions snapshot runs at 05:17 UTC (07:17 in Zurich), so its file is there by 08:00
+  - id: daily
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 8 * * *"
+    timezone: Europe/Zurich

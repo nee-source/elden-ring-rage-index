@@ -1,5 +1,5 @@
-# Local stack for the midterm: PostgreSQL + pgAdmin + the pipeline image, on one
-# shared network. Values come from .env (copy .env.example first).
+# Local stack for the midterm: PostgreSQL + pgAdmin + Kestra + the pipeline image,
+# on one shared network. Values come from .env (copy .env.example first).
 
 services:
   postgres:
@@ -57,14 +57,77 @@ services:
         condition: service_healthy
     # default: the daily batch; pass a command to run a single step instead
     command: >
-      sh -c "python -m ingestion.load_achievements &&
+      sh -c "python -m ingestion.sync_snapshots &&
+             python -m ingestion.load_achievements &&
              python -m ingestion.load_reviews &&
              python -m transform.run"
     networks:
       - rage-net
 
+  # orchestrator: runs the pipeline image once per task (see orchestration/flows/)
+  kestra:
+    image: kestra/kestra:v2.0.7
+    container_name: rage-kestra
+    # root is needed for the Docker socket (local development only)
+    user: "root"
+    # -f loads the flow files at startup; restart kestra after editing a flow
+    command: server standalone -f /flows --no-tutorials
+    environment:
+      # ENV_* variables are visible in flows as {{ envs.* }}
+      ENV_POSTGRES_DB: ${POSTGRES_DB}
+      ENV_POSTGRES_USER: ${POSTGRES_USER}
+      ENV_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KESTRA_CONFIGURATION: |
+        datasources:
+          postgres:
+            url: jdbc:postgresql://postgres:5432/kestra
+            driverClassName: org.postgresql.Driver
+            username: ${POSTGRES_USER}
+            password: ${POSTGRES_PASSWORD}
+        kestra:
+          server:
+            basic-auth:
+              username: ${KESTRA_USER}
+              password: ${KESTRA_PASSWORD}
+          repository:
+            type: postgres
+          queue:
+            type: postgres
+          storage:
+            type: local
+            local:
+              base-path: /app/storage
+          # allow the flow to mount the rage-raw volume into its task containers
+          tasks:
+            scripts:
+              docker:
+                volume-enabled: true
+          plugins:
+            configurations:
+              - type: io.kestra.plugin.scripts.runner.docker.Docker
+                values:
+                  volume-enabled: true
+          url: http://localhost:${KESTRA_PORT:-8090}/
+    ports:
+      - "${KESTRA_PORT:-8090}:8080"
+    volumes:
+      - kestra-data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./orchestration/flows:/flows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rage-net
+
 volumes:
   pgdata:
+  kestra-data:
+  # raw files of the pipeline runs that Kestra starts
+  rage-raw:
+    name: rage-raw
 
 networks:
   rage-net:
+    # fixed name, so Kestra can start task containers on this network
+    name: rage-net
