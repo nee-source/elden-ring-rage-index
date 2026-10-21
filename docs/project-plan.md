@@ -21,7 +21,7 @@ Deadlines (Europe/Zurich):
 - [x] Daily achievement snapshot job, **first**, because its history can't be backfilled (B). It runs on GitHub Actions and writes to the `snapshots` branch
 - [x] Load the snapshot files from the `snapshots` branch into PostgreSQL (B)
 - [x] Review ingestion: cursor pagination, retries, high-water mark, run log (A)
-- [ ] Full review backfill (a few hours because of the rate limit; resumable) (A)
+- [x] Full review backfill: 573,249 reviews in 3 h 14 min, resumable (A)
 - [x] Docker Compose with PostgreSQL + pgAdmin on a shared network (B)
 - [x] Pipeline image (`Dockerfile`) as a `pipeline` service in Docker Compose on `rage-net` (B)
 - [x] PostgreSQL raw/staging/mart schemas (B)

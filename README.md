@@ -154,7 +154,7 @@ How the loader works:
   - Only a successful run moves the high-water mark.
   - A failed or killed run can be continued with `--resume`.
 - **Rate limits:** Steam returns HTTP 429 after roughly 150 fast requests and unblocks after a few minutes. The loader waits 60 s and tries again, up to 10 times, and pauses 1 s between pages.
-- **Full backfill:** about 573k English reviews in roughly 5,700 pages. It takes a few hours because of the rate limit, and the raw files take ~600 MB. If your laptop goes to sleep, run `--resume`.
+- **Full backfill:** about 573k English reviews in roughly 5,700 pages. Our run took 3 h 14 min because of the rate limit, and the raw files take 580 MB. If your laptop goes to sleep, run `--resume`.
 - **Daily incremental run:** 1–2 pages.
 
 If your database was created before the run log changed, add the new table and columns once:
