@@ -1,0 +1,180 @@
+{
+  "snapshot_date": "2026-10-24",
+  "fetched_at": "2026-10-24T09:35:23+00:00",
+  "app_id": "1245620",
+  "source_url": "https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=1245620",
+  "response": {
+    "achievementpercentages": {
+      "achievements": [
+        {
+          "name": "ACH39",
+          "percent": "74.9"
+        },
+        {
+          "name": "ACH25",
+          "percent": "70.9"
+        },
+        {
+          "name": "ACH04",
+          "percent": "65.1"
+        },
+        {
+          "name": "ACH40",
+          "percent": "60.7"
+        },
+        {
+          "name": "ACH26",
+          "percent": "59.3"
+        },
+        {
+          "name": "ACH18",
+          "percent": "58.0"
+        },
+        {
+          "name": "ACH34",
+          "percent": "57.7"
+        },
+        {
+          "name": "ACH35",
+          "percent": "55.5"
+        },
+        {
+          "name": "ACH05",
+          "percent": "53.2"
+        },
+        {
+          "name": "ACH31",
+          "percent": "50.9"
+        },
+        {
+          "name": "ACH29",
+          "percent": "50.0"
+        },
+        {
+          "name": "ACH06",
+          "percent": "49.6"
+        },
+        {
+          "name": "ACH28",
+          "percent": "47.9"
+        },
+        {
+          "name": "ACH13",
+          "percent": "45.6"
+        },
+        {
+          "name": "ACH21",
+          "percent": "45.0"
+        },
+        {
+          "name": "ACH41",
+          "percent": "44.2"
+        },
+        {
+          "name": "ACH38",
+          "percent": "44.1"
+        },
+        {
+          "name": "ACH07",
+          "percent": "43.6"
+        },
+        {
+          "name": "ACH33",
+          "percent": "43.4"
+        },
+        {
+          "name": "ACH20",
+          "percent": "43.2"
+        },
+        {
+          "name": "ACH27",
+          "percent": "43.0"
+        },
+        {
+          "name": "ACH37",
+          "percent": "41.8"
+        },
+        {
+          "name": "ACH10",
+          "percent": "41.6"
+        },
+        {
+          "name": "ACH09",
+          "percent": "40.7"
+        },
+        {
+          "name": "ACH11",
+          "percent": "40.5"
+        },
+        {
+          "name": "ACH24",
+          "percent": "39.9"
+        },
+        {
+          "name": "ACH32",
+          "percent": "39.8"
+        },
+        {
+          "name": "ACH36",
+          "percent": "39.7"
+        },
+        {
+          "name": "ACH22",
+          "percent": "39.2"
+        },
+        {
+          "name": "ACH23",
+          "percent": "38.1"
+        },
+        {
+          "name": "ACH08",
+          "percent": "36.4"
+        },
+        {
+          "name": "ACH30",
+          "percent": "34.9"
+        },
+        {
+          "name": "ACH12",
+          "percent": "30.2"
+        },
+        {
+          "name": "ACH19",
+          "percent": "29.1"
+        },
+        {
+          "name": "ACH02",
+          "percent": "28.2"
+        },
+        {
+          "name": "ACH01",
+          "percent": "23.9"
+        },
+        {
+          "name": "ACH14",
+          "percent": "18.3"
+        },
+        {
+          "name": "ACH17",
+          "percent": "17.7"
+        },
+        {
+          "name": "ACH15",
+          "percent": "17.7"
+        },
+        {
+          "name": "ACH16",
+          "percent": "17.2"
+        },
+        {
+          "name": "ACH03",
+          "percent": "16.5"
+        },
+        {
+          "name": "ACH00",
+          "percent": "10.5"
+        }
+      ]
+    }
+  }
+}
