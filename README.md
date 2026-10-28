@@ -256,6 +256,7 @@ python ingestion/snapshot_achievements.py --data-dir /tmp/raw
 - **Full backfill is slow:** ~3 h because of Steam's undocumented rate limit. For a quick check, use the `since` input.
 - **English only:** we only analyse English reviews.
 - **Name matching:** boss mentions are found by matching names and nicknames from our seed table. Expect some false positives (e.g. the spell *Meteorite of Astel*) and misses. Precision is being measured on a labelled sample.
+- **External API changes:** Valve retired the old Steam reviews endpoint on 2026-10-22, right after our midterm submission. The tag `v0.2-midterm` still calls it, so `load_reviews` fails there; `main` uses the new `IUserReviewsService/GetAppReviews`. See [docs/dataset.md](docs/dataset.md).
 - **Deleted reviews** stay in our tables until a full reload. Incremental loads can't see deletions.
 - **Not true churn:** achievement % is a share of *all owners*, including people who never really played. Drop-offs compare bosses to each other; they don't measure how many players quit overall.
 - **Not built yet:** the funnel table and the data product `boss_rage_ranking`. Both are planned for the final milestone.

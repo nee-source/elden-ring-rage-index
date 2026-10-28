@@ -7,8 +7,8 @@ Numbers were checked against the live endpoints on **2026-09-25**. Elden Ring's 
 | | |
 |---|---|
 | **Provenance** | User reviews on the Steam store, published by Valve |
-| **Access** | `GET https://store.steampowered.com/appreviews/1245620?json=1&filter=updated&language=english&num_per_page=100&purchase_type=all&review_type=all&cursor=<cursor>` (`filter=updated` sorts by last update, newest first; `purchase_type=all` also includes reviews from keys not bought on Steam) |
-| **Format** | JSON: `query_summary`, `reviews[]`, and a `cursor` for the next page |
+| **Access** | `GET https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/?input_json={"appid":1245620,"filter":2,"languages":["english"],"num_per_page":100,"purchase_type":1,"review_type":0,"cursor":"<cursor>"}` (`filter` 2 sorts by last update, newest first; `purchase_type` 1 also includes reviews from keys not bought on Steam). Until 2026-10-22 we used `store.steampowered.com/appreviews/1245620?json=1&...`. Valve retired it on that day, and it now redirects to the store homepage |
+| **Format** | JSON: `response.query_summary`, `response.reviews[]`, and `response.cursor` for the next page. The review fields are the same as in the old endpoint |
 | **Update frequency** | Continuous. New reviews arrive every day, and existing ones can be edited or deleted |
 | **Volume** | 831,957 reviews in all languages (2026-09-25). **English: 573,286** (34,908 negative = 6.1 %) on 2026-10-08. About 1.1 KB per review as JSON, so a full English load is ~600 MB raw |
 | **Change rate** | About 100 English reviews are created or edited per day, so the daily incremental run is 1–2 pages. In our sample, 25–33 % of reviews had been edited after creation |
@@ -49,6 +49,7 @@ All other fields stay in the raw JSON and are not used. That includes `author.st
 - **Noise:** spam, memes, and empty or one-word reviews.
 - **Only roughly sorted:** the first page was not strictly in `timestamp_updated` order, so the loader stops only once a whole page is older than the high-water mark.
 - **Language filter leaks:** `language=english` still returned 3 non-English reviews (1 Hungarian, 2 Japanese) out of 573,249. Staging keeps `language = 'english'` only.
+- **The endpoint can change:** Valve retired the old `/appreviews` endpoint on 2026-10-22 and replaced it with `IUserReviewsService/GetAppReviews`. Our daily runs failed from 2026-10-24 until we switched on 2026-10-28. The fields stayed the same, and the gap was caught up by the next incremental run.
 - **Deletions are invisible** to incremental loads. A deleted review stays in our tables until a full reload.
 - **Rate limits:** undocumented. On 2026-10-08 Steam returned **HTTP 429** after ~160 requests in under 3 minutes. The response had no `Retry-After` header, and the block lifted after about 2.5 minutes. The loader waits 60 s on a 429, up to 10 times, and pauses 1 s between pages. The one-time full backfill needs many requests.
 

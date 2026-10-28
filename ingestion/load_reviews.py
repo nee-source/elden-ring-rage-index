@@ -1,8 +1,10 @@
 """Incremental load of English Steam reviews for Elden Ring.
 
 How it works:
-- Steam returns reviews newest-updated first (filter=updated), 100 per page,
-  with a cursor for the next page.
+- Steam's IUserReviewsService/GetAppReviews returns reviews newest-updated first
+  (filter 2 = updated), 100 per page, with a cursor for the next page. It replaced
+  the old store.steampowered.com/appreviews endpoint, which Valve retired on
+  2026-10-22 (it now redirects to the store homepage).
 - The high-water mark is the highest timestamp_updated we had after the last
   successful run. We page until a whole page is older than the mark (the order
   is only roughly sorted, so one old review is not enough to stop).
@@ -38,7 +40,7 @@ from psycopg.types.json import Jsonb
 
 from ingestion.db import connect
 
-URL = "https://store.steampowered.com/appreviews/{app_id}?{query}"
+URL = "https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/?{query}"
 STAGING_SQL = Path(__file__).parent.parent / "sql" / "staging" / "reviews.sql"
 MAX_TRIES = 4             # other errors: retry after 2, 4, 8 s
 RATE_LIMIT_WAIT = 60      # HTTP 429: wait this many seconds ...
@@ -58,22 +60,24 @@ log = logging.getLogger("load_reviews")
 
 def fetch_page(app_id, language, cursor):
     """One page of up to 100 reviews. Waits on rate limits, retries other errors."""
-    query = urllib.parse.urlencode({
-        "json": 1,
-        "filter": "updated",
-        "language": language,
+    # the parameters go as one JSON object; the options are numbers (enums) now
+    params = {
+        "appid": int(app_id),
+        "filter": 2,               # 2 = sort by last update
+        "languages": [language],
         "num_per_page": 100,
-        "purchase_type": "all",
-        "review_type": "all",
+        "purchase_type": 1,        # 1 = all, also keys not bought on Steam
+        "review_type": 0,          # 0 = positive and negative
         "cursor": cursor,
-    })
-    req = urllib.request.Request(URL.format(app_id=app_id, query=query),
+    }
+    query = urllib.parse.urlencode({"input_json": json.dumps(params)})
+    req = urllib.request.Request(URL.format(query=query),
                                  headers={"User-Agent": "deng-hs26-rage-index"})
     errors = rate_limits = 0
     while True:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.load(resp)
+                return json.load(resp)["response"]
         except urllib.error.HTTPError as err:
             if err.code != 429:
                 errors += 1
