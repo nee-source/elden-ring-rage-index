@@ -38,7 +38,7 @@ flowchart LR
     GA --> SB[(snapshots branch)]
     R[Steam reviews API] --> P
     SB --> P[rage-pipeline image:<br/>sync · load achievements ·<br/>load reviews · transform]
-    K{{Kestra: daily 08:00,<br/>retries, reruns, backfill}} -.runs.-> P
+    K{{Kestra: daily 14:00,<br/>retries, reruns, backfill}} -.runs.-> P
     P --> RAW[(PostgreSQL raw)] --> STG[(staging)] --> MART[(mart)]
     SEED[seeds/*.csv] --> P
     MART --> U[Guide writer:<br/>SQL / pgAdmin]
@@ -139,12 +139,13 @@ Each task runs the `rage-pipeline` image as its own container on `rage-net`. Raw
 
 **Verify:**
 
+One command per line, so they work in bash and in PowerShell:
+
 ```bash
-docker compose exec postgres psql -U rage -d rage_index \
-  -c "SELECT snapshot_date, count(*) FROM staging.achievement_snapshot GROUP BY 1 ORDER BY 1" \
-  -c "SELECT run_id, status, rows_loaded, note FROM raw.ingestion_runs ORDER BY run_id DESC LIMIT 3" \
-  -c "SELECT (SELECT count(*) FROM raw.reviews) AS raw_reviews, (SELECT count(*) FROM staging.reviews) AS staging_reviews" \
-  -c "SELECT boss_key, sum(mentions) AS mentions, sum(negative_mentions) AS negative FROM mart.boss_mentions_daily GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
+docker compose exec postgres psql -U rage -d rage_index -c "SELECT snapshot_date, count(*) FROM staging.achievement_snapshot GROUP BY 1 ORDER BY 1"
+docker compose exec postgres psql -U rage -d rage_index -c "SELECT run_id, status, rows_loaded, note FROM raw.ingestion_runs ORDER BY run_id DESC LIMIT 3"
+docker compose exec postgres psql -U rage -d rage_index -c "SELECT (SELECT count(*) FROM raw.reviews) AS raw_reviews, (SELECT count(*) FROM staging.reviews) AS staging_reviews"
+docker compose exec postgres psql -U rage -d rage_index -c "SELECT boss_key, sum(mentions) AS mentions, sum(negative_mentions) AS negative FROM mart.boss_mentions_daily GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
 ```
 
 You should see:
@@ -157,7 +158,7 @@ Execute the flow again without `since`: `load_reviews` now loads (almost) 0 revi
 
 ### 4. Schedule, retries, reruns and backfills
 
-- **Schedule:** the trigger `daily` runs the flow every day at 08:00 Europe/Zurich, after the GitHub Actions snapshot (05:17 UTC). It only fires while the stack is running.
+- **Schedule:** the trigger `daily` runs the flow every day at 14:00 Europe/Zurich. The GitHub Actions snapshot is scheduled for 05:17 UTC, but GitHub often starts it hours late (09:30–11:10 UTC in our runs), so 14:00 leaves room. The trigger only fires while the stack is running.
 - **Retries:** every task retries up to 3 times, 2 minutes apart. `load_reviews` has a 6 h timeout for the full backfill. Steam's rate limit is handled inside the loader (it waits 60 s on HTTP 429).
 - **Reruns:** all steps are idempotent: upserts on natural keys, and full rebuilds in the transform. So a failed execution can be restarted from the failed task (**Executions → Restart**), or the whole flow can be run again.
 - **Backfill:**

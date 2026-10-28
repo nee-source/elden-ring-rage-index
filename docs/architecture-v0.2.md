@@ -13,7 +13,7 @@ flowchart LR
     R[Steam reviews API] --> LR
 
     subgraph DC[Docker Compose · network rage-net]
-        K{{Kestra<br/>daily 08:00, retries,<br/>reruns, backfill}}
+        K{{Kestra<br/>daily 14:00, retries,<br/>reruns, backfill}}
         subgraph P[rage-pipeline image · one container per task]
             SS[sync_snapshots] --> LA[load_achievements] --> LR[load_reviews] --> T[transform]
         end

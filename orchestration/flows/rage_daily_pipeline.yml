@@ -91,8 +91,9 @@ tasks:
       maxAttempts: 3
 
 triggers:
-  # the GitHub Actions snapshot runs at 05:17 UTC (07:17 in Zurich), so its file is there by 08:00
+  # the GitHub Actions snapshot is scheduled for 05:17 UTC, but GitHub often starts it
+  # hours late (up to ~11:10 UTC seen), so we run at 14:00 Zurich time
   - id: daily
     type: io.kestra.plugin.core.trigger.Schedule
-    cron: "0 8 * * *"
+    cron: "0 14 * * *"
     timezone: Europe/Zurich
