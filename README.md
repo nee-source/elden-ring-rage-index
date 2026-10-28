@@ -2,6 +2,13 @@
 
 > DENG HS26 — End-to-End Batch Data Pipeline · Team XX · Status: **Milestone 2 (midterm, Architecture v0.2)**
 
+> [!IMPORTANT]
+> **Midterm reviewers:** Valve retired the Steam reviews endpoint we used (`store.steampowered.com/appreviews`) on **2026-10-22**, the day of our submission. It now redirects to the Steam homepage, so our original submission failed at the Kestra task `load_reviews` (`JSONDecodeError: Expecting value`).
+> - On 2026-10-28 we moved the tag **`v0.2-midterm`** to a version with the fix: the new endpoint `IUserReviewsService/GetAppReviews`. The tables and SQL are unchanged. The instructor has been informed.
+> - The original submission is kept as tag **`v0.2-midterm-submitted`** (commit `415f193`).
+> - If you cloned before 2026-10-28, update the tag with `git fetch --tags --force` and then `git checkout v0.2-midterm`.
+> - Background: [docs/dataset.md](docs/dataset.md).
+
 Which Elden Ring boss makes players give up? This project combines two public Steam sources:
 
 - **What players do:** the global achievement unlock rate for each boss
